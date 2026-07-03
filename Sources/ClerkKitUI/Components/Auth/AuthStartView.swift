@@ -155,7 +155,10 @@ struct AuthStartView: View {
 
   private var lastUsedAuth: LastUsedAuth? {
     guard authState.persistsIdentifiers else { return nil }
-    return LastUsedAuth(environment: clerk.environment)
+    return LastUsedAuth(
+      environment: clerk.environment,
+      trustedDeviceSignInIsVisible: shouldShowTrustedDeviceSignIn
+    )
   }
 
   private var hasSocialProviders: Bool {
@@ -297,15 +300,37 @@ struct AuthStartView: View {
   }
 }
 
-private enum TrustedDeviceAvailabilityRefreshState: Equatable {
+enum AuthStartTrustedDeviceRefreshState: Equatable {
   case disabled
-  case signedOut(identifierHint: String?)
-  case signedIn(activeSessionID: String, identifierHint: String?)
+  case signedOut
+  case signedIn(activeSessionID: String)
+
+  static func state(
+    trustedDeviceFeatureIsEnabled: Bool,
+    activeSessionID: String?
+  ) -> Self {
+    guard trustedDeviceFeatureIsEnabled else {
+      return .disabled
+    }
+    guard let activeSessionID else {
+      return .signedOut
+    }
+    return .signedIn(activeSessionID: activeSessionID)
+  }
 }
 
 extension AuthStartView {
   private var trustedDeviceFeatureIsEnabled: Bool {
-    clerk.environment?.authConfig.nativeSettings.trustedDeviceSignInEnabled == true
+    guard authState.allowsTrustedDeviceSignIn else {
+      return false
+    }
+
+    guard let nativeSettings = clerk.environment?.authConfig.nativeSettings else {
+      return false
+    }
+
+    return nativeSettings.apiEnabled &&
+      nativeSettings.trustedDeviceSignInEnabled
   }
 
   private var shouldShowTrustedDeviceSignIn: Bool {
@@ -314,19 +339,11 @@ extension AuthStartView {
       trustedDeviceAvailability?.isAvailable == true
   }
 
-  private var trustedDeviceIdentifierHint: String? {
-    let trimmedIdentifier = activeIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmedIdentifier.isEmpty ? nil : trimmedIdentifier
-  }
-
-  private var trustedDeviceAvailabilityRefreshState: TrustedDeviceAvailabilityRefreshState {
-    guard trustedDeviceFeatureIsEnabled else {
-      return .disabled
-    }
-    guard clerk.session?.status == .active, let sessionID = clerk.session?.id else {
-      return .signedOut(identifierHint: trustedDeviceIdentifierHint)
-    }
-    return .signedIn(activeSessionID: sessionID, identifierHint: trustedDeviceIdentifierHint)
+  private var trustedDeviceAvailabilityRefreshState: AuthStartTrustedDeviceRefreshState {
+    .state(
+      trustedDeviceFeatureIsEnabled: trustedDeviceFeatureIsEnabled,
+      activeSessionID: clerk.session?.status == .active ? clerk.session?.id : nil
+    )
   }
 }
 
@@ -427,6 +444,7 @@ extension AuthStartView {
       cancelAutomaticPasskeySignIn()
       await signInWithTrustedDevice()
     }
+    .lastUsedAuthBadgeOverlay(lastUsedAuth?.showsTrustedDeviceBadge == true)
     .simultaneousGesture(TapGesture())
   }
 
@@ -713,18 +731,14 @@ extension AuthStartView {
       return
     }
 
-    trustedDeviceAvailability = try? await clerk.trustedDevices.availability(
-      identifierHint: trustedDeviceIdentifierHint
-    )
+    trustedDeviceAvailability = try? await clerk.trustedDevices.availability()
   }
 
   private func signInWithTrustedDevice() async {
     generalError = nil
 
     do {
-      let signIn = try await clerk.trustedDevices.signIn(
-        identifierHint: trustedDeviceIdentifierHint
-      )
+      let signIn = try await clerk.trustedDevices.signIn()
       navigation.setToStepForStatus(signIn: signIn)
     } catch {
       if error.isCancellationError {
