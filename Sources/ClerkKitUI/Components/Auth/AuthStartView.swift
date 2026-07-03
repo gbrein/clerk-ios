@@ -454,7 +454,9 @@ extension AuthStartView {
         trustedDeviceSignInButton
       }
 
-      socialButtonsSection
+      if hasSocialProviders {
+        socialButtonsSection
+      }
     }
   }
 
