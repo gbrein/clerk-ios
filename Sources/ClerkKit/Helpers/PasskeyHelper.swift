@@ -92,25 +92,21 @@ final class PasskeyHelper: NSObject {
   ) async throws -> ASAuthorization {
     try Task.checkCancellation()
     Self.cancelCurrentAuthorization()
-    let helperID = ObjectIdentifier(self)
 
-    return try await withTaskCancellationHandler {
-      try Task.checkCancellation()
-      return try await withCheckedThrowingContinuation { continuation in
-        self.continuation = continuation
-        Self.activeHelper = self
+    // Capsula fork: o padrão original `withTaskCancellationHandler { withCheckedThrowingContinuation { ... } }`
+    // crasha o region-based isolation checker do Swift 6.4 (Xcode 27 beta) — swiftlang/swift#80016.
+    // Removido o handler de cancelamento (o app do Capsula não usa passkeys); o fluxo de
+    // autorização é idêntico. Reverter para o upstream quando o compilador for corrigido.
+    return try await withCheckedThrowingContinuation { continuation in
+      self.continuation = continuation
+      Self.activeHelper = self
 
-        let authController = ASAuthorizationController(authorizationRequests: requests)
-        authController.delegate = self
-        authController.presentationContextProvider = self
-        Self.controller = authController
+      let authController = ASAuthorizationController(authorizationRequests: requests)
+      authController.delegate = self
+      authController.presentationContextProvider = self
+      Self.controller = authController
 
-        start(authController)
-      }
-    } onCancel: {
-      Task { @MainActor in
-        Self.cancelAuthorization(for: helperID)
-      }
+      start(authController)
     }
   }
 
