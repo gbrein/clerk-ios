@@ -244,18 +244,6 @@ struct AuthStateConfigurationTests {
   }
 
   @Test
-  func configurationControlsTrustedDeviceSignInAvailability() {
-    let defaults = makeUserDefaults()
-    let authState = AuthState(userDefaults: defaults)
-
-    #expect(authState.allowsTrustedDeviceSignIn)
-
-    authState.configure(AuthConfig(allowsTrustedDeviceSignIn: false))
-
-    #expect(!authState.allowsTrustedDeviceSignIn)
-  }
-
-  @Test
   func configurationCanBeAppliedDuringInitialization() {
     let defaults = makeUserDefaults()
     defaults.set("stored@example.com", forKey: AuthState.identifierStorageKey)
@@ -267,8 +255,7 @@ struct AuthStateConfigurationTests {
       config: AuthConfig(
         initialIdentifier: "seed@example.com",
         persistsIdentifiers: false,
-        unsafeMetadata: metadata,
-        allowsTrustedDeviceSignIn: false
+        unsafeMetadata: metadata
       ),
       userDefaults: defaults
     )
@@ -278,7 +265,6 @@ struct AuthStateConfigurationTests {
     #expect(authState.persistsIdentifiers == false)
     #expect(authState.hasInitialIdentifier == true)
     #expect(authState.unsafeMetadata == metadata)
-    #expect(authState.allowsTrustedDeviceSignIn == false)
     #expect(defaults.string(forKey: AuthState.identifierStorageKey) == nil)
     #expect(defaults.string(forKey: AuthState.phoneNumberStorageKey) == nil)
     #expect(LastUsedAuth.retrieveStoredIdentifierType(userDefaults: defaults) == nil)
